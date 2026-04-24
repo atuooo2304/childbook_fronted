@@ -1,0 +1,6 @@
+{
+  "name": "StoryPals 亲子故事家",
+  "description": "一个由 AI 驱动的沉浸式亲子电子绘本平台，通过对话和主题生成专属的蜡笔风格童话故事。",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["AI Story Generation", "Image Generation", "Text-to-Speech"]
+}
