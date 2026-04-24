@@ -14,6 +14,22 @@ export interface StoryPage {
   imageUrl: string;
   imagePrompt: string;
   layout?: 'bottom' | 'top-left' | 'top-right' | 'centered';
+  layoutHint?: 'bottom' | 'top-left' | 'top-right' | 'centered';
+  ttsText?: string;
+}
+
+export interface BranchChoiceOption {
+  id: 'A' | 'B';
+  label: string;
+}
+
+export interface StoryBranching {
+  branchPageIndex: number;
+  choices: BranchChoiceOption[];
+  paths: {
+    A: StoryPage[];
+    B: StoryPage[];
+  };
 }
 
 export interface Story {
@@ -24,6 +40,9 @@ export interface Story {
   createdAt: number;
   theme: string;
   isFavorite?: boolean;
+  outline?: unknown;
+  generationMeta?: unknown;
+  branching?: StoryBranching;
 }
 
 export type AppView = 'onboarding' | 'home' | 'workshop' | 'reader' | 'library' | 'settings' | 'completion';

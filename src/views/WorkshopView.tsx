@@ -5,9 +5,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
-import { Story, StoryPage } from '../types.ts';
+import { Story } from '../types.ts';
 import { Sparkles, X, Brush, BookOpen, Palette, Pen } from 'lucide-react';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 
 interface Props {
   storyTopic?: string;
@@ -31,66 +30,54 @@ export default function WorkshopView({ onBack, onComplete, storyTopic }: Props) 
   const startGeneration = async () => {
     setIsGenerating(true);
     setProgress(10);
-    setStatus('故事精灵正在构思情节...');
+    setStatus('故事精灵正在构思剧情...');
 
     try {
-      // 1. Initialize Gemini
-      const apiKey = (window as any).process?.env?.GEMINI_API_KEY || '';
-      if (!apiKey) {
-        throw new Error('Missing Gemini API Key');
-      }
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-
-      // 2. Generate Story Structure
-      const storyPrompt = `
-        你是一个专门为儿童写电子绘本的作家。
-        请根据以下主题创作一个短小精悍的绘本故事：
-        主题：${storyTopic || '神奇的森林冒险'}
-        要求：
-        1. 故事分为3-5个画面（页面）。
-        2. 每个页面包含：
-           - text: 简洁、充满童趣、适合朗诵的1-2句话。
-           - imagePrompt: 为AI绘图工具提供的英文描述词。要求：蜡笔画风格(crayon illustration style), 质地柔软(soft texture), 暖色调(warm colors), 简洁构图(simple composition), 儿童视角(childlike perspective), 手绘感(hand-drawn feel)。
-        
-        请以JSON数组格式返回：[{"text": "...", "imagePrompt": "..."}, ...]
-      `;
-
       setProgress(30);
-      setStatus('正在挥毫泼墨，完善细节...');
-      
-      const result = await model.generateContent(storyPrompt);
-      const text = result.response.text();
-      
-      // Basic JSON cleanup
-      const jsonMatch = text.match(/\[.*\]/s);
-      if (!jsonMatch) throw new Error('Failed to generate story structure');
-      const pages: StoryPage[] = JSON.parse(jsonMatch[0]);
+      setStatus('正在绘制页面与画面...');
 
       setProgress(60);
-      setStatus('故事精灵正在为你铺满色彩...');
-
-      // 3. For each page, we would normally generate an image.
-      // Since image generation is a separate tool/cost, we will use placeholders for now
-      // but ideally we'd use get_image_url or similar if implemented in backend.
-      // For this demo, let's use high-quality Unsplash placeholders with descriptors.
-      
-      const storyPages: StoryPage[] = pages.map((p, idx) => ({
-        ...p,
-        imageUrl: `https://loremflickr.com/800/600/illustration,crayon,child?lock=${Math.floor(Math.random() * 1000) + idx}`
-      }));
-
-      setProgress(90);
       setStatus('正在装订你的专属绘本...');
 
-      const newStory: Story = {
-        id: Math.random().toString(36).substr(2, 9),
-        title: pages[0].text.substring(0, 10) + '...',
-        pages: storyPages,
-        coverUrl: storyPages[0].imageUrl,
-        createdAt: Date.now(),
-        theme: storyTopic || '自由创作'
-      };
+      const savedProfile = localStorage.getItem('story_pals_profile');
+      const profile = savedProfile ? JSON.parse(savedProfile) : null;
+
+      const response = await fetch('/api/generate-book', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          child: {
+            name: profile?.name || '小读者',
+            age: profile?.age || 5,
+          },
+          input: {
+            type: 'one_liner',
+            value: storyTopic || '神奇的森林冒险',
+          },
+          style: {
+            styleId: 'crayon',
+          },
+          role: {
+            name: profile?.name || '主角',
+            traits: '温暖勇敢',
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const newStory: Story | undefined = data?.story;
+      if (!newStory || !Array.isArray(newStory.pages) || !newStory.pages.length) {
+        throw new Error('生成结果为空');
+      }
+
+      setProgress(90);
+      setStatus(data?.meta?.fallbackUsed ? '已启用演示兜底版本，马上完成...' : '正在完成最后装订...');
 
       // Save to library
       const saved = localStorage.getItem('story_pals_library');

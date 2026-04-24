@@ -15,10 +15,42 @@ interface Props {
 }
 
 export default function ReaderView({ story, onBack, onComplete }: Props) {
+  const [selectedBranch, setSelectedBranch] = useState<'A' | 'B' | null>(null);
   const [currentSpreadIndex, setCurrentSpreadIndex] = useState(0);
-  const totalSpreads = Math.ceil(story.pages.length / 2);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const branchConfig = story.branching;
+  const renderedPages =
+    branchConfig && selectedBranch
+      ? [...story.pages, ...(branchConfig.paths[selectedBranch] || [])]
+      : story.pages;
+  const totalSpreads = Math.ceil(renderedPages.length / 2);
+
+  const stopSpeaking = () => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    setIsSpeaking(false);
+  };
+
+  const speakPage = (page?: { text?: string; ttsText?: string }) => {
+    if (!page) return;
+    if (!('speechSynthesis' in window)) return;
+    const text = page.ttsText || page.text || '';
+    if (!text.trim()) return;
+
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'zh-CN';
+    utterance.rate = 0.92;
+    utterance.pitch = 1.08;
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+    setIsSpeaking(true);
+    window.speechSynthesis.speak(utterance);
+  };
 
   const nextPage = () => {
+    stopSpeaking();
     if (currentSpreadIndex < totalSpreads - 1) {
       setCurrentSpreadIndex(currentSpreadIndex + 1);
     } else {
@@ -27,6 +59,7 @@ export default function ReaderView({ story, onBack, onComplete }: Props) {
   };
 
   const prevPage = () => {
+    stopSpeaking();
     if (currentSpreadIndex > 0) {
       setCurrentSpreadIndex(currentSpreadIndex - 1);
     }
@@ -35,11 +68,19 @@ export default function ReaderView({ story, onBack, onComplete }: Props) {
   const leftPageIndex = currentSpreadIndex * 2;
   const rightPageIndex = leftPageIndex + 1;
 
-  const leftPage = story.pages[leftPageIndex];
-  const rightPage = story.pages[rightPageIndex];
+  const leftPage = renderedPages[leftPageIndex];
+  const rightPage = renderedPages[rightPageIndex];
+  const isOnBranchChoiceSpread =
+    !!branchConfig &&
+    selectedBranch === null &&
+    leftPageIndex <= branchConfig.branchPageIndex &&
+    branchConfig.branchPageIndex <= rightPageIndex;
 
   const PageContent = ({ page, index, isLeft }: { page?: any, index: number, isLeft: boolean }) => {
-    const layout = page?.layout || (index % 3 === 0 ? 'bottom' : index % 3 === 1 ? 'top-left' : 'top-right');
+    const layout =
+      page?.layoutHint ||
+      page?.layout ||
+      (index % 3 === 0 ? 'bottom' : index % 3 === 1 ? 'top-left' : 'top-right');
     
     const layoutClasses = {
       'bottom': 'inset-x-0 bottom-0',
@@ -74,7 +115,10 @@ export default function ReaderView({ story, onBack, onComplete }: Props) {
 
               {!isLeft && (
                 <div className="absolute bottom-8 right-8 z-30">
-                   <button className="w-14 h-14 bg-black/20 hover:bg-black/40 backdrop-blur-md rounded-full flex items-center justify-center text-white border border-white/20 transition-all shadow-xl active:scale-90">
+                   <button
+                      onClick={() => (isSpeaking ? stopSpeaking() : speakPage(page))}
+                      className="w-14 h-14 bg-black/20 hover:bg-black/40 backdrop-blur-md rounded-full flex items-center justify-center text-white border border-white/20 transition-all shadow-xl active:scale-90"
+                   >
                       <Volume2 size={28} />
                    </button>
                 </div>
@@ -117,13 +161,33 @@ export default function ReaderView({ story, onBack, onComplete }: Props) {
             <PageContent page={leftPage} index={leftPageIndex} isLeft={true} />
             <PageContent page={rightPage} index={rightPageIndex} isLeft={false} />
           </div>
+
+          {isOnBranchChoiceSpread && branchConfig && (
+            <div className="absolute inset-x-10 bottom-8 bg-black/45 backdrop-blur-md rounded-3xl p-4 md:p-6 border border-white/20">
+              <p className="text-white font-bold mb-3 md:mb-4">接下来想怎么发展？</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {branchConfig.choices.map((choice) => (
+                  <button
+                    key={choice.id}
+                    onClick={() => setSelectedBranch(choice.id)}
+                    className="text-left bg-white/85 hover:bg-white rounded-2xl px-4 py-3 text-stone-800 font-semibold transition"
+                  >
+                    {choice.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </main>
 
       {/* Navigation Bar */}
       <nav className="fixed bottom-0 left-0 w-full z-50 flex justify-between items-center px-6 md:px-10 py-4 bg-[#FFF9E6]/95 backdrop-blur-md rounded-t-[40px] border-t-2 border-yellow-700/10 shadow-lg">
         <button
-          onClick={onBack}
+          onClick={() => {
+            stopSpeaking();
+            onBack();
+          }}
           className="flex items-center gap-3 text-yellow-800/60 p-3 hover:text-yellow-900 transition-all group"
         >
           <div className="w-10 h-10 md:w-12 md:h-12 flex items-center justify-center bg-surface-container-high rounded-2xl border border-yellow-900/5 group-hover:bg-yellow-100/50">
@@ -149,6 +213,7 @@ export default function ReaderView({ story, onBack, onComplete }: Props) {
           </button>
           <button
             onClick={nextPage}
+            disabled={isOnBranchChoiceSpread}
             className="flex items-center gap-2 md:gap-3 p-3 group transition-all"
           >
             <span className="hidden md:inline font-black text-yellow-600 uppercase tracking-wide text-sm font-label">
